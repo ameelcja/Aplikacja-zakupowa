@@ -26,23 +26,12 @@ raw_input = st.text_area(
     height=100
 )
 
-def get_active_model(client):
-    try:
-        for m in client.models.list():
-            name = getattr(m, 'name', '')
-            if 'gemini-2.5-flash' in name:
-                return name.replace('models/', '')
-    except Exception:
-        pass
-    return "gemini-2.5-flash"
-
 def analyze_promotions_and_assign_shops(items_list):
     client = genai.Client(api_key=API_KEY)
-    target_model = get_active_model(client)
 
     prompt = f"""
     Jesteś analitykiem zakupowym dla rynku polskiego.
-    Przeanalizuj poniższe produkty pod kątem ofert i poziomu cen w sieciach LIDL Polska oraz AUCHAN Polska:
+    Przeanalizuj poniższe produkty pod kątem aktualnych ofert, gazetek i poziomu cen w sieciach LIDL Polska oraz AUCHAN Polska:
     {', '.join(items_list)}
 
     Dla każdego artykułu:
@@ -52,11 +41,11 @@ def analyze_promotions_and_assign_shops(items_list):
     4. "ocena_koszt": w skali 1-5 (5 = niski wydatek/tani artykuł, 1 = drogi artykuł)
     5. "ocena_potrzeba": w skali 1-5 (5 = artykuł niezbędny/zdrowotny/żywność podstawowa, 1 = zachcianka/luksus)
     6. "ocena_okazja": w skali 1-5 (5 = świetna oferta/promocja, 1 = cena standardowa)
-    7. "uwagi": krótkie uzasadnienie (np. 'Niższa cena regularna w Auchan', 'Lepsza oferta w Lidlu')
+    7. "uwagi": krótkie uzasadnienie (np. 'Niższa cena regularna w Auchan', 'Lepsza oferta marek własnych w Lidlu')
 
     Zwróć odpowiedź WYŁĄCZNIE jako surowy JSON w formacie tablicy:
     [
-      {{"name": "Masło", "sklep": "Lidl", "cena_pln": 5.99, "ocena_koszt": 4.5, "ocena_potrzeba": 5.0, "ocena_okazja": 4.0, "uwagi": "Dobra oferta marek własnych"}}
+      {{"name": "Masło", "sklep": "Lidl", "cena_pln": 5.99, "ocena_koszt": 4.5, "ocena_potrzeba": 5.0, "ocena_okazja": 4.0, "uwagi": "Dobra oferta w Lidlu"}}
     ]
     """
 
@@ -65,8 +54,9 @@ def analyze_promotions_and_assign_shops(items_list):
         temperature=0.2
     )
 
+    # Używamy modelu wskazanego przez API
     response = client.models.generate_content(
-        model=target_model,
+        model="gemini-3.6-flash",
         contents=prompt,
         config=config
     )
@@ -126,7 +116,7 @@ if st.button("🔍 Sprawdź promocje i optymalizuj koszyki"):
                 st.subheader("📋 Matryca priorytetów i rekomendacje")
                 st.dataframe(
                     df[["Produkt", "Rekomendowany sklep", "koszt", "potrzeba", "dostępność/okazja", "Priorytet", "Cena (zł)", "Wskazówka", "Decyzja"]],
-                    use_container_width=True
+                    width="stretch"
                 )
 
                 col1, col2 = st.columns(2)
