@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 import json
 import re
+import time
 from google import genai
-from google.genai import types
+from google.genai.errors import APIError
 
 API_KEY = "AQ.Ab8RN6L7UO4NqURBJQJyKPIN9MXXiFKDqxgyn1PTcIqWE3hV5w"
 
@@ -36,29 +37,56 @@ def analyze_promotions_and_assign_shops(items_list):
 
     Dla każdego artykułu:
     1. "name": nazwa produktu
-    2. "sklep": wybierz 'Lidl' lub 'Auchan' (dobierz sklep, w którym ten produkt ma lepszy stosunek ceny do jakości, tańsze marki własne lub typowo korzystniejsze ceny rynkowe).
+    2. "sklep": wybierz 'Lidl' lub 'Auchan' (dobierz sklep, w którym ten produkt ma lepszy stosunek ceny do jakości, tańsze marki własne lub ogólnie korzystniejsze ceny rynkowe).
     3. "cena_pln": szacunkowa realna cena rynkowa w PLN (liczba, np. 5.99).
     4. "ocena_koszt": w skali 1-5 (5 = artykuł tani / oszczędny wydatek, 1 = drogi artykuł).
     5. "ocena_potrzeba": w skali 1-5 (5 = artykuł pierwszej potrzeby, zdrowie, żywność codzienna, 1 = zachcianka / luksus).
     6. "ocena_okazja": w skali 1-5 pod kątem atrakcyjności oferty (5 = wyjątkowo opłacalny wybór w tym sklepie, 1 = standardowa cena).
-    7. "uwagi": krótkie uzasadnienie wyboru (np. 'Korzystniejsza cena marek własnych w Lidlu', 'Większy wybór i niższa cena w Auchan').
+    7. "uwagi": krótkie uzasadnienie wyboru (np. 'Lepsze ceny marek własnych w Lidlu', 'Większy asortyment i niższa cena w Auchan').
 
-    Zwróć WYŁĄCZNIE czysty format JSON w postaci tablicy obiektów bez żadnego innego komentarza:
+    Zwróć WYŁĄCZNIE czysty format JSON w postaci tablicy obiektów:
     [
       {{"name": "Masło", "sklep": "Lidl", "cena_pln": 6.29, "ocena_koszt": 4.0, "ocena_potrzeba": 5.0, "ocena_okazja": 4.0, "uwagi": "Dobre masło marki Pilos"}}
     ]
     """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt
-    )
+    # Lista modeli w kolejności priorytetu
+    candidate_models = [
+        "gemini-3.6-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite"
+    ]
 
-    text = response.text.strip()
-    match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
-    if match:
-        return json.loads(match.group(0))
-    return json.loads(text.replace("```json", "").replace("```", "").strip())
+    last_error = None
+
+    for model_name in candidate_models:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                text = response.text.strip()
+                match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
+                if match:
+                    return json.loads(match.group(0))
+                return json.loads(text.replace("```json", "").replace("```", "").strip())
+            except APIError as e:
+                last_error = e
+                if e.code == 503:
+                    time.sleep(2)
+                    continue
+                break
+            except Exception as e:
+                last_error = e
+                if "503" in str(e):
+                    time.sleep(2)
+                    continue
+                break
+
+    raise RuntimeError(f"Wszystkie modele są chwilowo przeciążone. Spróbuj za chwilę. Ostatni błąd: {last_error}")
 
 if st.button("🔍 Optymalizuj koszyki i przelicz priorytety"):
     if not raw_input.strip():
@@ -66,7 +94,7 @@ if st.button("🔍 Optymalizuj koszyki i przelicz priorytety"):
     else:
         items_raw = [x.strip() for x in raw_input.replace("\n", ",").split(",") if x.strip()]
         
-        with st.spinner("AI analizuje opłacalność w Lidlu i Auchan oraz oblicza priorytety..."):
+        with st.spinner("AI analizuje opłacalność w Lidlu i Auchan oraz wyznacza priorytety..."):
             try:
                 data = analyze_promotions_and_assign_shops(items_raw)
                 parsed = []
@@ -77,7 +105,6 @@ if st.button("🔍 Optymalizuj koszyki i przelicz priorytety"):
                     pkt_p = float(entry.get("ocena_potrzeba", 3.0))
                     pkt_o = float(entry.get("ocena_okazja", 2.0))
 
-                    # Skala priorytetów: (koszt * 0.5) + (potrzeba * 0.4) + (dostępność/okazja * 0.3)
                     priorytet = round(
                         (pkt_k * waga_koszt) + (pkt_p * waga_potrzeba) + (pkt_o * waga_dostepnosc), 
                         2
