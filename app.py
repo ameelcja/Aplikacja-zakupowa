@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import json
 import re
+import time
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 
 API_KEY = "AQ.Ab8RN6L7UO4NqURBJQJyKPIN9MXXiFKDqxgyn1PTcIqWE3hV5w"
 
@@ -49,23 +51,39 @@ def analyze_promotions_and_assign_shops(items_list):
     ]
     """
 
+    # Grounding zoptymalizowany pod kątem limitów API
     config = types.GenerateContentConfig(
         tools=[types.Tool(google_search=types.GoogleSearch())],
         temperature=0.2
     )
 
-    # Używamy modelu wskazanego przez API
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt,
-        config=config
-    )
-
-    text = response.text.strip()
-    match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
-    if match:
-        return json.loads(match.group(0))
-    return json.loads(text.replace("```json", "").replace("```", "").strip())
+    # Mechanizm ponawiania zapytania (obsługa limitu 429)
+    max_retries = 3
+    delay = 5
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt,
+                config=config
+            )
+            text = response.text.strip()
+            match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+            return json.loads(text.replace("```json", "").replace("```", "").strip())
+        except APIError as e:
+            if e.code == 429 and attempt < max_retries - 1:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            raise e
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries - 1:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            raise e
 
 if st.button("🔍 Sprawdź promocje i optymalizuj koszyki"):
     if not raw_input.strip():
@@ -73,7 +91,7 @@ if st.button("🔍 Sprawdź promocje i optymalizuj koszyki"):
     else:
         items_raw = [x.strip() for x in raw_input.replace("\n", ",").split(",") if x.strip()]
         
-        with st.spinner("AI analizuje oferty w Lidlu i Auchan oraz przelicza priorytety..."):
+        with st.spinner("AI analizuje oferty w Lidlu i Auchan (chwilka na przetworzenie limitów)..."):
             try:
                 data = analyze_promotions_and_assign_shops(items_raw)
                 parsed = []
