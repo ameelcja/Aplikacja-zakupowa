@@ -30,9 +30,8 @@ if "last_context" not in st.session_state:
     st.session_state.last_context = ""
 
 def clean_json_string(text):
-    """Bezpieczne wyciąganie JSON bez problemów ze stringami."""
-    text = text.strip()
     match = re.search(r'(\[.*\]|\{.*\})', text, re.DOTALL)
     if match:
         return match.group(1)
-    text = text.replace("```json", "").replace("
+    clean = re.sub(r'```[a-zA-Z]*', '', text)
+    clean = clean.replace('
