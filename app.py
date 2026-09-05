@@ -2,23 +2,21 @@ import streamlit as st
 import pandas as pd
 import json
 import re
-import time
 from google import genai
 from google.genai import types
-from google.genai.errors import APIError
 
 API_KEY = "AQ.Ab8RN6L7UO4NqURBJQJyKPIN9MXXiFKDqxgyn1PTcIqWE3hV5w"
 
 st.set_page_config(page_title="Inteligentne Zakupy: Lidl vs Auchan", layout="wide")
 
 st.title("🛒 Asystent Promocji: Lidl & Auchan")
-st.write("Wpisz produkty, a AI przeszuka oferty w Lidlu oraz Auchan, przeliczy priorytety i rozdzieli listę na sklepy.")
+st.write("Wpisz produkty, a AI przeanalizuje typowe poziomy cen i specyfikę ofert Lidla oraz Auchan, przeliczy priorytety i rozdzieli listę na sklepy.")
 
 # Wagi kryteriów
 st.sidebar.header("⚖️ Skala wagowa kryteriów")
 waga_koszt = st.sidebar.number_input("Waga: Koszt / Przystępność", value=0.5, step=0.1)
 waga_potrzeba = st.sidebar.number_input("Waga: Potrzeba", value=0.4, step=0.1)
-waga_dostepnosc = st.sidebar.number_input("Waga: Okazja / Promocja", value=0.3, step=0.1)
+waga_dostepnosc = st.sidebar.number_input("Waga: Okazja / Dostępność", value=0.3, step=0.1)
 
 budget = st.number_input("Dostępny budżet łącznie (zł):", min_value=0.0, value=250.0, step=25.0)
 
@@ -32,66 +30,43 @@ def analyze_promotions_and_assign_shops(items_list):
     client = genai.Client(api_key=API_KEY)
 
     prompt = f"""
-    Jesteś analitykiem zakupowym dla rynku polskiego.
-    Przeanalizuj poniższe produkty pod kątem aktualnych ofert, gazetek i poziomu cen w sieciach LIDL Polska oraz AUCHAN Polska:
+    Jesteś polskim ekspertem ds. optymalizacji zakupów spożywczych i rynkowych.
+    Przeanalizuj poniższe artykuły pod kątem realnych cen, marek własnych i opłacalności w sieciach LIDL Polska oraz AUCHAN Polska:
     {', '.join(items_list)}
 
     Dla każdego artykułu:
     1. "name": nazwa produktu
-    2. "sklep": wybierz wyłącznie 'Lidl' lub 'Auchan' (wskaż sklep z korzystniejszą ceną, promocją lub lepszą ofertą dla tej kategorii)
-    3. "cena_pln": szacunkowa cena w PLN (liczba, np. 6.49)
-    4. "ocena_koszt": w skali 1-5 (5 = niski wydatek/tani artykuł, 1 = drogi artykuł)
-    5. "ocena_potrzeba": w skali 1-5 (5 = artykuł niezbędny/zdrowotny/żywność podstawowa, 1 = zachcianka/luksus)
-    6. "ocena_okazja": w skali 1-5 (5 = świetna oferta/promocja, 1 = cena standardowa)
-    7. "uwagi": krótkie uzasadnienie (np. 'Niższa cena regularna w Auchan', 'Lepsza oferta marek własnych w Lidlu')
+    2. "sklep": wybierz 'Lidl' lub 'Auchan' (dobierz sklep, w którym ten produkt ma lepszy stosunek ceny do jakości, tańsze marki własne lub typowo korzystniejsze ceny rynkowe).
+    3. "cena_pln": szacunkowa realna cena rynkowa w PLN (liczba, np. 5.99).
+    4. "ocena_koszt": w skali 1-5 (5 = artykuł tani / oszczędny wydatek, 1 = drogi artykuł).
+    5. "ocena_potrzeba": w skali 1-5 (5 = artykuł pierwszej potrzeby, zdrowie, żywność codzienna, 1 = zachcianka / luksus).
+    6. "ocena_okazja": w skali 1-5 pod kątem atrakcyjności oferty (5 = wyjątkowo opłacalny wybór w tym sklepie, 1 = standardowa cena).
+    7. "uwagi": krótkie uzasadnienie wyboru (np. 'Korzystniejsza cena marek własnych w Lidlu', 'Większy wybór i niższa cena w Auchan').
 
-    Zwróć odpowiedź WYŁĄCZNIE jako surowy JSON w formacie tablicy:
+    Zwróć WYŁĄCZNIE czysty format JSON w postaci tablicy obiektów bez żadnego innego komentarza:
     [
-      {{"name": "Masło", "sklep": "Lidl", "cena_pln": 5.99, "ocena_koszt": 4.5, "ocena_potrzeba": 5.0, "ocena_okazja": 4.0, "uwagi": "Dobra oferta w Lidlu"}}
+      {{"name": "Masło", "sklep": "Lidl", "cena_pln": 6.29, "ocena_koszt": 4.0, "ocena_potrzeba": 5.0, "ocena_okazja": 4.0, "uwagi": "Dobre masło marki Pilos"}}
     ]
     """
 
-    # Grounding zoptymalizowany pod kątem limitów API
-    config = types.GenerateContentConfig(
-        tools=[types.Tool(google_search=types.GoogleSearch())],
-        temperature=0.2
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt
     )
 
-    # Mechanizm ponawiania zapytania (obsługa limitu 429)
-    max_retries = 3
-    delay = 5
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=prompt,
-                config=config
-            )
-            text = response.text.strip()
-            match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
-            if match:
-                return json.loads(match.group(0))
-            return json.loads(text.replace("```json", "").replace("```", "").strip())
-        except APIError as e:
-            if e.code == 429 and attempt < max_retries - 1:
-                time.sleep(delay)
-                delay *= 2
-                continue
-            raise e
-        except Exception as e:
-            if "429" in str(e) and attempt < max_retries - 1:
-                time.sleep(delay)
-                delay *= 2
-                continue
-            raise e
+    text = response.text.strip()
+    match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
+    if match:
+        return json.loads(match.group(0))
+    return json.loads(text.replace("```json", "").replace("```", "").strip())
 
-if st.button("🔍 Sprawdź promocje i optymalizuj koszyki"):
+if st.button("🔍 Optymalizuj koszyki i przelicz priorytety"):
     if not raw_input.strip():
         st.warning("Wpisz przynajmniej jeden produkt.")
     else:
         items_raw = [x.strip() for x in raw_input.replace("\n", ",").split(",") if x.strip()]
         
-        with st.spinner("AI analizuje oferty w Lidlu i Auchan (chwilka na przetworzenie limitów)..."):
+        with st.spinner("AI analizuje opłacalność w Lidlu i Auchan oraz oblicza priorytety..."):
             try:
                 data = analyze_promotions_and_assign_shops(items_raw)
                 parsed = []
@@ -102,6 +77,7 @@ if st.button("🔍 Sprawdź promocje i optymalizuj koszyki"):
                     pkt_p = float(entry.get("ocena_potrzeba", 3.0))
                     pkt_o = float(entry.get("ocena_okazja", 2.0))
 
+                    # Skala priorytetów: (koszt * 0.5) + (potrzeba * 0.4) + (dostępność/okazja * 0.3)
                     priorytet = round(
                         (pkt_k * waga_koszt) + (pkt_p * waga_potrzeba) + (pkt_o * waga_dostepnosc), 
                         2
@@ -134,7 +110,7 @@ if st.button("🔍 Sprawdź promocje i optymalizuj koszyki"):
                 st.subheader("📋 Matryca priorytetów i rekomendacje")
                 st.dataframe(
                     df[["Produkt", "Rekomendowany sklep", "koszt", "potrzeba", "dostępność/okazja", "Priorytet", "Cena (zł)", "Wskazówka", "Decyzja"]],
-                    width="stretch"
+                    use_container_width=True
                 )
 
                 col1, col2 = st.columns(2)
