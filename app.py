@@ -101,14 +101,21 @@ st.sidebar.markdown("---")
 st.sidebar.caption("🛒 **Inteligentny Asystent Zakupowy**\nPlanowanie makro/gramatur, oferty Lidl/Auchan i matryca wagowa.")
 
 # ==========================================
-# MODUŁ 1: PLANER POSIŁKÓW Z GRAMATURĄ I MAKRO
+# MODUŁ 1: PLANER POSIŁKÓW Z KALORIAMI I MAKRO
 # ==========================================
 if menu_choice == "🍳 Planer posiłków i przepisów":
     st.title("🍳 Precyzyjny Planer Posiłków & Generator Listy Zakupów")
-    st.write("Dopasuj posiłki, styl żywienia (w tym insulinooporność i dietę niskotłuszczową) oraz otrzymaj dokładne gramatury i wartości odżywcze.")
+    st.write("Dopasuj dzienny limit kalorii, posiłki, styl żywienia (w tym insulinooporność i dietę niskotłuszczową) oraz otrzymaj dokładne gramatury i wartości odżywcze.")
 
     col1, col2 = st.columns([1, 2])
     with col1:
+        daily_calorie_target = st.number_input(
+            "🔥 Dzienny limit kalorii (kcal):", 
+            min_value=1000, 
+            max_value=4500, 
+            value=2000, 
+            step=50
+        )
         days_count = st.slider("Liczba dni:", min_value=1, max_value=7, value=2)
         diet_type = st.selectbox(
             "Styl żywienia / Dieta:",
@@ -130,42 +137,44 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
 
     with col2:
         preferences = st.text_area(
-            "Preferencje kulinarne, wykluczenia lub cel:",
+            "Preferencje kulinarne, wykluczenia lub składniki:",
             placeholder="np. wytrawne śniadania, dużo warzyw o niskim IG, pierś z kurczaka, bez laktozy",
-            height=130
+            height=140
         )
 
-    def generate_meal_plan_advanced(days, diet, meals, prefs):
+    def generate_meal_plan_advanced(target_kcal, days, diet, meals, prefs):
         client = genai.Client(api_key=API_KEY)
         meals_str = ", ".join(meals)
         prompt = f"""
         Jesteś dyplomowanym dietetykiem klinicznym w Polsce.
         Przygotuj precyzyjny jadłospis na {days} dni:
-        - Dieta: {diet} (Zwróć szczególną uwagę na zasady diety: jeśli dla insulinoopornych - niski ładunek i indeks glikemiczny, pełnoziarniste węglowodany, odpowiednie źródła białka; jeśli niskotłuszczowa - minimalna zawartość tłuszczów, chudy nabiał, chude mięso).
-        - Wybrane posiłki na każdy dzień: {meals_str}
-        - Uwagi użytkownika: {prefs if prefs else "brak"}
+        - DZIENNY LIMIT KALORII: dokładnie około {target_kcal} kcal na każdy dzień (+/- 50 kcal). Rozdziel tę sumę kalorii sensownie pomiędzy wybrane posiłki.
+        - Dieta: {diet} (Jeśli insulinooporność: niski indeks i ładunek glikemiczny, złożone węglowodany, zrównoważony wyrzut insuliny; jeśli niskotłuszczowa: minimalna ilość tłuszczów nasyconych, chudy nabiał, unikanie smażenia na głębokim tłuszczu).
+        - Wybrane posiłki na dzień: {meals_str}
+        - Preferencje i wykluczenia: {prefs if prefs else "brak"}
 
-        Dla KAŻDEGO wybranego posiłku podaj:
+        Dla KAŻDEGO posiłku podaj:
         1. "typ": np. 'Śniadanie', 'Obiad' itp.
-        2. "nazwa": nazwa potrawy
-        3. "skladniki_gramatura": lista składników Z ZAWSZE PODANĄ DOKŁADNĄ WAGĄ LUB MIARĄ (np. "200 g makaronu pełnoziarnistego", "150 g piersi z kurczaka", "10 g oliwy z oliwek", "1 szt. (50 g) jajko")
-        4. "wartosci_odzywcze": szacunki makroskładników posiłku w formacie obiektu: {{"kcal": 450, "b": 35, "t": 10, "w": 55}} (kcal, białko w g, tłuszcz w g, węglowodany w g)
+        2. "nazwa": nazwa dania
+        3. "skladniki_gramatura": lista składników Z ZAWSZE DOKŁADNIE OKREŚLONĄ WAGĄ W GRAMACH LUB SZTUKACH (np. "180 g piersi z kurczaka", "70 g ryżu basmati", "150 g brokułu", "10 g oliwy"). Gramatury muszą być precyzyjnie dobrane, aby posiłki łącznie dały założone {target_kcal} kcal dziennie!
+        4. "wartosci_odzywcze": {{"kcal": 450, "b": 35, "t": 10, "w": 55}} (kcal, białko w g, tłuszcz w g, węglowodany w g)
         5. "przepis": krótki, konkretny sposób przygotowania (2-3 zdania).
 
-        Na koniec stwórz zsumowaną listę artykułów z podaniem łącznej gramatury lub sztuk do kupienia w sklepie (np. "pierś z kurczaka 400 g", "makaron pełnoziarnisty 1 op.", "jajka 6 szt.").
+        Na koniec wygeneruj zsumowaną listę artykułów z podaniem łącznej wagi/opakowań do kupienia w polskim sklepie (np. "pierś z kurczaka 400 g", "jaja z wolnego wybiegu 10 szt.").
 
-        Zwróć WYŁĄCZNIE czysty JSON:
+        Zwróć WYŁĄCZNIE poprawny format JSON w postaci obiektu:
         {{
           "dni": [
             {{
               "dzien": 1,
+              "suma_kcal_dnia": {target_kcal},
               "posilki": [
                 {{
                   "typ": "Śniadanie",
                   "nazwa": "Jajecznica na parze ze szczypiorkiem",
                   "skladniki_gramatura": ["3 szt. jajka (150 g)", "5 g masła", "20 g szczypiorku", "70 g chleba żytniego 100%"],
                   "wartosci_odzywcze": {{"kcal": 380, "b": 24, "t": 18, "w": 30}},
-                  "przepis": "Rozgrzej patelnię z masłem. Wbij jajka, smaż na wolnym ogniu i podawaj z żytnim pieczywem."
+                  "przepis": "Rozgrzej patelnię z masłem. Wbij jajka, smaż na wolnym ogniu i podawaj ze świeżym pieczywem."
                 }}
               ]
             }}
@@ -176,46 +185,51 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
         raw = generate_with_fallback(client, prompt)
         return json.loads(clean_json_string(raw))
 
-    if st.button("✨ Generuj jadłospis z gramaturami i makro"):
+    if st.button("✨ Generuj jadłospis z limitem kalorii i makro"):
         if not selected_meals:
-            st.warning("Zaznacz przynajmniej jeden posiłek (np. Obiad).")
+            st.warning("Zaznacz przynajmniej jeden posiłek (np. Śniadanie, Obiad, Kolacja).")
         else:
-            with st.spinner("AI bilansuje wartości odżywcze, wylicza gramatury i tworzy plan..."):
+            with st.spinner(f"AI bilansuje posiłki pod cel {daily_calorie_target} kcal/dzień i oblicza gramatury..."):
                 try:
-                    plan = generate_meal_plan_advanced(days_count, diet_type, selected_meals, preferences)
+                    plan = generate_meal_plan_advanced(daily_calorie_target, days_count, diet_type, selected_meals, preferences)
                     st.session_state.meal_plan_data = plan
                     st.session_state.shared_shopping_list = ", ".join(plan.get("lista_zakupow", []))
                     
                     context_rows = []
                     for d in plan.get("dni", []):
+                        s_kcal = d.get('suma_kcal_dnia', daily_calorie_target)
+                        context_rows.append(f"Dzień {d['dzien']} (Łącznie: ~{s_kcal} kcal):")
                         for p in d.get("posilki", []):
                             macro = p.get("wartosci_odzywcze", {})
-                            context_rows.append(f"Dzień {d['dzien']} - {p['typ']}: {p['nazwa']} ({macro.get('kcal', 0)} kcal | B:{macro.get('b', 0)}g T:{macro.get('t', 0)}g W:{macro.get('w', 0)}g)")
-                    st.session_state.last_context = f"DIETA ({diet_type}):\n" + "\n".join(context_rows) + "\nZAKUPY: " + st.session_state.shared_shopping_list
+                            context_rows.append(f"  - {p['typ']}: {p['nazwa']} ({macro.get('kcal', 0)} kcal | B:{macro.get('b', 0)}g T:{macro.get('t', 0)}g W:{macro.get('w', 0)}g)")
+                    st.session_state.last_context = f"DIETA ({diet_type}, Cel: {daily_calorie_target} kcal):\n" + "\n".join(context_rows) + "\nZAKUPY: " + st.session_state.shared_shopping_list
                 except Exception as e:
                     st.error(f"Błąd generowania planu: {e}")
 
     if st.session_state.meal_plan_data:
         plan = st.session_state.meal_plan_data
         st.markdown("---")
-        st.subheader("📋 Zaplanowane Posiłki, Gramatury i Makro")
+        st.subheader("📋 Zaplanowane Posiłki, Gramatury i Wartości Odżywcze")
         
         for d in plan.get("dni", []):
-            st.markdown(f"### 📅 Dzień {d.get('dzien', 1)}")
             posilki = d.get("posilki", [])
+            suma_kcal_dnia = sum(p.get("wartosci_odzywcze", {}).get("kcal", 0) for p in posilki)
+            suma_b_dnia = sum(p.get("wartosci_odzywcze", {}).get("b", 0) for p in posilki)
+            suma_t_dnia = sum(p.get("wartosci_odzywcze", {}).get("t", 0) for p in posilki)
+            suma_w_dnia = sum(p.get("wartosci_odzywcze", {}).get("w", 0) for p in posilki)
+
+            st.markdown(f"### 📅 Dzień {d.get('dzien', 1)} — Podsumowanie: `{suma_kcal_dnia} kcal` (B: {suma_b_dnia}g | T: {suma_t_dnia}g | W: {suma_w_dnia}g)")
             
-            # Dynamiczne kolumny w zależności od liczby wybranych posiłków
             cols = st.columns(len(posilki)) if posilki else [st.container()]
             for idx, p in enumerate(posilki):
                 with cols[idx]:
                     st.markdown(f"**{p.get('typ', 'Posiłek')}**")
                     st.write(f"*{p.get('nazwa', '')}*")
                     
-                    # Wizualizacja makroskładników
                     macro = p.get("wartosci_odzywcze", {})
                     st.caption(f"🔥 **{macro.get('kcal', 0)} kcal** | B: {macro.get('b', 0)}g | T: {macro.get('t', 0)}g | W: {macro.get('w', 0)}g")
                     
-                    with st.expander("⚖️ Gramatura składników", expanded=True):
+                    with st.expander("⚖️ Dokładna waga składników", expanded=True):
                         for sk in p.get("skladniki_gramatura", []):
                             st.write(f"- {sk}")
                     
@@ -470,7 +484,7 @@ elif menu_choice == "💬 Asystent AI":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    user_msg = st.chat_input("Napisz pytanie, np.: Jak podbić białko w kolacji? Jak zamienić ten makaron?")
+    user_msg = st.chat_input("Napisz pytanie, np.: Jak dobić 300 kcal w kolacji? Jak zamienić ten makaron?")
     if user_msg:
         st.session_state.chat_history.append({"role": "user", "content": user_msg})
         with st.chat_message("user"):
@@ -479,7 +493,7 @@ elif menu_choice == "💬 Asystent AI":
         client = genai.Client(api_key=API_KEY)
         chat_prompt = f"""
         Jesteś dyplomowanym doradcą żywieniowym i zakupowym w Polsce.
-        Znasz diety kliniczne (insulinooporność, niskotłuszczowa), potrafisz modyfikować gramatury i makroskładniki oraz doradzać tanie zakupy w Lidlu i Auchan.
+        Znasz diety kliniczne (insulinooporność, niskotłuszczowa), bilansowanie kalorii, gramatury i makroskładniki oraz doradzasz tanie zakupy w Lidlu i Auchan.
         Odpowiadaj konkretnie, profesjonalnie i zwięźle.
 
         Kontekst ostatnich analiz użytkownika:
