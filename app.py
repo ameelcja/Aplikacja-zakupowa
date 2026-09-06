@@ -10,7 +10,7 @@ API_KEY = "AQ.Ab8RN6L7UO4NqURBJQJyKPIN9MXXiFKDqxgyn1PTcIqWE3hV5w"
 
 st.set_page_config(page_title="Inteligentny Asystent Zakupowy & Kulinarny", layout="wide", initial_sidebar_state="expanded")
 
-# Wstrzyknięcie nowoczesnych stylów CSS dla dymków czatu
+# Style dymków
 st.markdown("""
 <style>
 .chat-container {
@@ -61,7 +61,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inicjalizacja stanu sesji
+# Pamięć sesji
 if "user_name" not in st.session_state:
     st.session_state.user_name = "Użytkowniku"
 
@@ -95,26 +95,9 @@ def clean_json_string(text):
     pattern = rf'{b}{{3}}[a-zA-Z]*|{b}{{3}}'
     return re.sub(pattern, '', text).strip()
 
-def get_supported_models(client):
-    active_models = []
-    try:
-        for m in client.models.list():
-            name = getattr(m, 'name', '')
-            if 'flash' in name.lower():
-                active_models.append(name.replace('models/', ''))
-    except Exception:
-        pass
-    
-    preferred_order = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
-    sorted_models = [m for m in preferred_order if m in active_models]
-    for m in active_models:
-        if m not in sorted_models:
-            sorted_models.append(m)
-            
-    return sorted_models if sorted_models else preferred_order
-
 def generate_with_fallback(client, prompt):
-    candidate_models = get_supported_models(client)
+    # Najpierw szybki model lite, potem standardowy flash
+    candidate_models = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash"]
     last_err = None
 
     for model_name in candidate_models:
@@ -128,17 +111,33 @@ def generate_with_fallback(client, prompt):
             except APIError as e:
                 last_err = e
                 if e.code in [503, 429]:
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
                 break
             except Exception as e:
                 last_err = e
                 if "503" in str(e) or "429" in str(e):
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
                 break
 
     raise RuntimeError(f"Blad polaczenia z modelem AI: {last_err}")
+
+def stream_chat_response(client, prompt):
+    candidate_models = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash"]
+    for model_name in candidate_models:
+        try:
+            response_stream = client.models.generate_content_stream(
+                model=model_name,
+                contents=prompt
+            )
+            for chunk in response_stream:
+                if chunk.text:
+                    yield chunk.text
+            return
+        except Exception:
+            continue
+    yield "Przepraszam, chwilowe opóźnienie sieciowe. Proszę powtórz pytanie."
 
 # ==========================================
 # PASEK BOCZNY - NAWIGACJA
@@ -160,7 +159,7 @@ st.sidebar.markdown("---")
 st.sidebar.caption("🛒 **Inteligentny Asystent Zakupowy**\nPersonalizacja diety, wskaźniki BMI/CPM, Lidl/Auchan i matryca priorytetów.")
 
 # ==========================================
-# MODUŁ 0: PROFIL & KALKULATOR (BMI / CPM / MAKRO)
+# MODUŁ 0: PROFIL & KALKULATOR
 # ==========================================
 if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     st.title(f"Cześć, {st.session_state.user_name}! 👋")
@@ -686,7 +685,7 @@ elif menu_choice == "📊 Lista na podstawie wag":
         c2.metric("Pozostało w budżecie", f"{st.session_state.matrix_budget - st.session_state.matrix_allocated:.2f} zł")
 
 # ==========================================
-# MODUŁ 4: ASYSTENT AI (NOWOCZESNE DYMKI CZATU)
+# MODUŁ 4: ASYSTENT AI (STREAMING NA ŻYWO)
 # ==========================================
 elif menu_choice == "💬 Asystent AI":
     st.title(f"Cześć, {st.session_state.user_name}! 💬")
@@ -696,7 +695,7 @@ elif menu_choice == "💬 Asystent AI":
         with st.expander("📌 Aktywny kontekst z Twoich wcześniejszych analiz"):
             st.text(st.session_state.last_context)
 
-    # Renderowanie historii rozmowy w dymkach HTML
+    # Render historii
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     for msg in st.session_state.chat_history:
         if msg["role"] == "user":
@@ -725,13 +724,24 @@ elif menu_choice == "💬 Asystent AI":
     if user_msg:
         st.session_state.chat_history.append({"role": "user", "content": user_msg})
 
+        # Dymek użytkownika
+        user_render = f"""
+        <div class="chat-row chat-row-user" style="margin-bottom: 14px;">
+            <div class="chat-bubble bubble-user">
+                <div class="chat-avatar">Ty ({st.session_state.user_name})</div>
+                <div>{user_msg}</div>
+            </div>
+        </div>
+        """
+        st.markdown(user_render, unsafe_allow_html=True)
+
         client = genai.Client(api_key=API_KEY)
         chat_prompt = f"""
         Jesteś dyplomowanym doradcą żywieniowym i zakupowym w Polsce.
         Rozmawiasz z użytkownikiem o imieniu {st.session_state.user_name}.
         Znasz diety kliniczne (insulinooporność, niskotłuszczowa), bilansowanie kalorii, gramatury i makroskładniki oraz doradzasz tanie zakupy w Lidlu i Auchan.
         Zwracaj się bezpośrednio i naturalnie po imieniu.
-        Używaj zwięzłego, czytelnego formatowania.
+        Odpowiadaj konkretnie, zwięźle i natychmiast przechodź do sedna.
 
         Kontekst ostatnich analiz użytkownika:
         {st.session_state.last_context if st.session_state.last_context else "Brak wcześniejszych danych."}
@@ -739,9 +749,31 @@ elif menu_choice == "💬 Asystent AI":
         Pytanie: {user_msg}
         """
 
-        try:
-            reply = generate_with_fallback(client, chat_prompt)
-            st.session_state.chat_history.append({"role": "assistant", "content": reply})
-            st.rerun()
-        except Exception as e:
-            st.error(f"Błąd odpowiedzi asystenta: {e}")
+        # Kontener strumieniowania odpowiedzi
+        assistant_slot = st.empty()
+        full_reply = ""
+
+        for chunk in stream_chat_response(client, chat_prompt):
+            full_reply += chunk
+            formatted_live = full_reply.replace("\n", "<br>")
+            assistant_slot.markdown(f"""
+            <div class="chat-row chat-row-assistant" style="margin-bottom: 14px;">
+                <div class="chat-bubble bubble-assistant">
+                    <div class="chat-avatar" style="color: #2563eb;">🤖 Asystent AI</div>
+                    <div>{formatted_live} ▌</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Usunięcie kursora po zakończeniu generowania
+        formatted_final = full_reply.replace("\n", "<br>")
+        assistant_slot.markdown(f"""
+        <div class="chat-row chat-row-assistant" style="margin-bottom: 14px;">
+            <div class="chat-bubble bubble-assistant">
+                <div class="chat-avatar" style="color: #2563eb;">🤖 Asystent AI</div>
+                <div>{formatted_final}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.session_state.chat_history.append({"role": "assistant", "content": full_reply})
