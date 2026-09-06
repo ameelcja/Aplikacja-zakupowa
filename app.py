@@ -10,6 +10,57 @@ API_KEY = "AQ.Ab8RN6L7UO4NqURBJQJyKPIN9MXXiFKDqxgyn1PTcIqWE3hV5w"
 
 st.set_page_config(page_title="Inteligentny Asystent Zakupowy & Kulinarny", layout="wide", initial_sidebar_state="expanded")
 
+# Wstrzyknięcie nowoczesnych stylów CSS dla dymków czatu
+st.markdown("""
+<style>
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 25px;
+}
+.chat-row {
+    display: flex;
+    width: 100%;
+}
+.chat-row-user {
+    justify-content: flex-end;
+}
+.chat-row-assistant {
+    justify-content: flex-start;
+}
+.chat-bubble {
+    max-width: 78%;
+    padding: 12px 18px;
+    border-radius: 18px;
+    font-size: 15px;
+    line-height: 1.5;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
+    word-wrap: break-word;
+}
+.bubble-user {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: #ffffff !important;
+    border-bottom-right-radius: 4px;
+}
+.bubble-user * {
+    color: #ffffff !important;
+}
+.bubble-assistant {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    border-bottom-left-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+.chat-avatar {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    opacity: 0.85;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Inicjalizacja stanu sesji
 if "user_name" not in st.session_state:
     st.session_state.user_name = "Użytkowniku"
@@ -143,7 +194,6 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
             ]
         )
 
-    # Obliczenia dietetyczne
     pal_factors = {
         "Siedzący (praca biurowa, mało ruchu) [PAL 1.2]": 1.2,
         "Lekka aktywność (spacery, 1-2 lekkie treningi/tydz.) [PAL 1.4]": 1.4,
@@ -169,7 +219,6 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
 
     target_kcal_calc = int(round(cpm + delta_kcal))
 
-    # BMI i zakres prawidłowej wagi
     wzrost_m = wzrost / 100.0
     bmi = round(waga / (wzrost_m ** 2), 1)
 
@@ -207,9 +256,6 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     m3.metric("Rekomendowane Kcal", f"{target_kcal_calc} kcal", f"Cel: {cel.split(' (')[0]}")
     m4.metric("Zalecana woda", f"{woda_litry} l / dzień", "Nawodnienie")
 
-    # ==========================================
-    # GRAFICZNY WSKAŹNIK BMI (HTML / CSS)
-    # ==========================================
     st.markdown("#### 📈 Wizualizacja Twojego BMI na skali")
 
     min_scale = 10.0
@@ -242,13 +288,8 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     </div>
     """
     st.markdown(bmi_gauge_html, unsafe_allow_html=True)
-
-    # Informacja o wadze docelowej
     st.info(weight_advice)
 
-    # ==========================================
-    # WSKAZÓWKI: CZEGO UNIKAĆ W DIECIE
-    # ==========================================
     st.markdown("---")
     st.subheader("🚫 Czego unikać w diecie, aby zoptymalizować zdrowie i wagę?")
 
@@ -265,7 +306,7 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
         st.write("Wystrzegaj się białego pieczywa tostowego, drobnych kasz pszennych, rozgotowanego makaronu i słodyczy na pusty żołądek. Powodują gwałtowne skoki i spadki energii.")
         
         st.markdown("**4. Nieregularne jedzenie i podjadanie**")
-        st.write("Unikaj ciągłego 'chrupania' między posiłkami (orzechów, owoców suszonych, kęsów jedzenia) — każde podjadanie utrzymuje podwyższony poziom glukozy i utrudnia spalanie tkanki tłuszczowej.")
+        st.write("Unikaj ciągłego 'chrupania' między posiłkami (orzechów, owoców suszonych, kęsów jedzenia) — każde podjadanie utrzymuje podwyższony poziom glukozy i utrudnia redukcję.")
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("💾 Zapisz profil i prześlij kalorie do Planera dań"):
@@ -645,7 +686,7 @@ elif menu_choice == "📊 Lista na podstawie wag":
         c2.metric("Pozostało w budżecie", f"{st.session_state.matrix_budget - st.session_state.matrix_allocated:.2f} zł")
 
 # ==========================================
-# MODUŁ 4: ASYSTENT AI (CZAT NA ŻYWO)
+# MODUŁ 4: ASYSTENT AI (NOWOCZESNE DYMKI CZATU)
 # ==========================================
 elif menu_choice == "💬 Asystent AI":
     st.title(f"Cześć, {st.session_state.user_name}! 💬")
@@ -655,15 +696,34 @@ elif menu_choice == "💬 Asystent AI":
         with st.expander("📌 Aktywny kontekst z Twoich wcześniejszych analiz"):
             st.text(st.session_state.last_context)
 
+    # Renderowanie historii rozmowy w dymkach HTML
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        if msg["role"] == "user":
+            row_html = f"""
+            <div class="chat-row chat-row-user">
+                <div class="chat-bubble bubble-user">
+                    <div class="chat-avatar">Ty ({st.session_state.user_name})</div>
+                    <div>{msg["content"]}</div>
+                </div>
+            </div>
+            """
+        else:
+            formatted_text = msg["content"].replace("\n", "<br>")
+            row_html = f"""
+            <div class="chat-row chat-row-assistant">
+                <div class="chat-bubble bubble-assistant">
+                    <div class="chat-avatar" style="color: #2563eb;">🤖 Asystent AI</div>
+                    <div>{formatted_text}</div>
+                </div>
+            </div>
+            """
+        st.markdown(row_html, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     user_msg = st.chat_input("Napisz pytanie, np.: Jak dobić 300 kcal w kolacji? Jak zamienić ten makaron?")
     if user_msg:
         st.session_state.chat_history.append({"role": "user", "content": user_msg})
-        with st.chat_message("user"):
-            st.markdown(user_msg)
 
         client = genai.Client(api_key=API_KEY)
         chat_prompt = f"""
@@ -671,6 +731,7 @@ elif menu_choice == "💬 Asystent AI":
         Rozmawiasz z użytkownikiem o imieniu {st.session_state.user_name}.
         Znasz diety kliniczne (insulinooporność, niskotłuszczowa), bilansowanie kalorii, gramatury i makroskładniki oraz doradzasz tanie zakupy w Lidlu i Auchan.
         Zwracaj się bezpośrednio i naturalnie po imieniu.
+        Używaj zwięzłego, czytelnego formatowania.
 
         Kontekst ostatnich analiz użytkownika:
         {st.session_state.last_context if st.session_state.last_context else "Brak wcześniejszych danych."}
@@ -678,11 +739,9 @@ elif menu_choice == "💬 Asystent AI":
         Pytanie: {user_msg}
         """
 
-        with st.chat_message("assistant"):
-            with st.spinner("Odpowiadam..."):
-                try:
-                    reply = generate_with_fallback(client, chat_prompt)
-                    st.markdown(reply)
-                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
-                except Exception as e:
-                    st.error(f"Błąd odpowiedzi asystenta: {e}")
+        try:
+            reply = generate_with_fallback(client, chat_prompt)
+            st.session_state.chat_history.append({"role": "assistant", "content": reply})
+            st.rerun()
+        except Exception as e:
+            st.error(f"Błąd odpowiedzi asystenta: {e}")
