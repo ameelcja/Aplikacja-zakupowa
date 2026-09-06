@@ -10,6 +10,13 @@ API_KEY = "AQ.Ab8RN6L7UO4NqURBJQJyKPIN9MXXiFKDqxgyn1PTcIqWE3hV5w"
 
 st.set_page_config(page_title="Inteligentny Asystent Zakupowy & Kulinarny", layout="wide", initial_sidebar_state="expanded")
 
+# Inicjalizacja stanu sesji
+if "user_name" not in st.session_state:
+    st.session_state.user_name = "Użytkowniku"
+
+if "calculated_target_kcal" not in st.session_state:
+    st.session_state.calculated_target_kcal = 2000
+
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -85,11 +92,12 @@ def generate_with_fallback(client, prompt):
 # ==========================================
 # PASEK BOCZNY - NAWIGACJA
 # ==========================================
-st.sidebar.title("🧭 Menu Aplikacji")
+st.sidebar.title(f"👋 Cześć, {st.session_state.user_name}!")
 
 menu_choice = st.sidebar.radio(
-    "Wybierz moduł:",
+    "Nawigacja:",
     [
+        "👤 Profil, Zdrowie & Kalorie",
         "🍳 Planer posiłków i przepisów",
         "🏷️ Lista zakupów z promocjami",
         "📊 Lista na podstawie wag",
@@ -98,13 +106,107 @@ menu_choice = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("🛒 **Inteligentny Asystent Zakupowy**\nPlanowanie makro/gramatur, oferty Lidl/Auchan i matryca wagowa.")
+st.sidebar.caption("🛒 **Inteligentny Asystent Zakupowy**\nPersonalizacja diety, makro, oferty Lidl/Auchan i matryca wagowa.")
 
 # ==========================================
-# MODUŁ 1: PLANER POSIŁKÓW Z KALORIAMI I MAKRO
+# MODUŁ 0: PROFIL & KALKULATOR (BMI / CPM / MAKRO)
 # ==========================================
-if menu_choice == "🍳 Planer posiłków i przepisów":
-    st.title("🍳 Precyzyjny Planer Posiłków & Generator Listy Zakupów")
+if menu_choice == "👤 Profil, Zdrowie & Kalorie":
+    st.title(f"Cześć, {st.session_state.user_name}! 👋")
+    st.write("Skonfiguruj swój profil, aby aplikacja precyzyjnie dopasowywała zapotrzebowanie kaloryczne, jadłospisy i zakupy.")
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        name_input = st.text_input("Jak masz na imię?", value=st.session_state.user_name if st.session_state.user_name != "Użytkowniku" else "")
+        plec = st.radio("Płeć:", ["Kobieta", "Mężczyzna"], horizontal=True)
+        wiek = st.number_input("Wiek (lata):", min_value=14, max_value=100, value=22, step=1)
+        waga = st.number_input("Waga (kg):", min_value=35.0, max_value=200.0, value=60.0, step=0.5)
+        wzrost = st.number_input("Wzrost (cm):", min_value=120, max_value=230, value=168, step=1)
+
+    with col_p2:
+        aktywnosc = st.selectbox(
+            "Poziom aktywności fizycznej (tryb życia):",
+            [
+                "Siedzący (praca biurowa, mało ruchu) [PAL 1.2]",
+                "Lekka aktywność (spacery, 1-2 lekkie treningi/tydz.) [PAL 1.4]",
+                "Umiarkowana aktywność (regularne bieganie/treningi 3-4x/tydz.) [PAL 1.6]",
+                "Duża aktywność (intensywne treningi 5-6x/tydz.) [PAL 1.8]"
+            ]
+        )
+        cel = st.selectbox(
+            "Twój cel sylwetkowy / zdrowotny:",
+            [
+                "Utrzymanie wagi (0 kcal)",
+                "Redukcja umiarkowana (-300 kcal)",
+                "Redukcja wyraźna (-500 kcal)",
+                "Budowa masy mięśniowej (+300 kcal)"
+            ]
+        )
+
+    # Obliczenia dietetyczne
+    pal_factors = {
+        "Siedzący (praca biurowa, mało ruchu) [PAL 1.2]": 1.2,
+        "Lekka aktywność (spacery, 1-2 lekkie treningi/tydz.) [PAL 1.4]": 1.4,
+        "Umiarkowana aktywność (regularne bieganie/treningi 3-4x/tydz.) [PAL 1.6]": 1.6,
+        "Duża aktywność (intensywne treningi 5-6x/tydz.) [PAL 1.8]": 1.8
+    }
+    pal = pal_factors[aktywnosc]
+
+    # BMR wzorem Mifflina-St Jeora
+    if plec == "Kobieta":
+        bmr = (10 * waga) + (6.25 * wzrost) - (5 * wiek) - 161
+    else:
+        bmr = (10 * waga) + (6.25 * wzrost) - (5 * wiek) + 5
+
+    cpm = bmr * pal
+
+    # Korekta o cel
+    delta_kcal = 0
+    if "Redukcja umiarkowana" in cel:
+        delta_kcal = -300
+    elif "Redukcja wyraźna" in cel:
+        delta_kcal = -500
+    elif "Budowa masy" in cel:
+        delta_kcal = 300
+
+    target_kcal_calc = int(round(cpm + delta_kcal))
+
+    # BMI
+    wzrost_m = wzrost / 100.0
+    bmi = round(waga / (wzrost_m ** 2), 1)
+
+    if bmi < 18.5:
+        bmi_status = "Niedowaga"
+    elif bmi < 25.0:
+        bmi_status = "Waga w normie ✅"
+    elif bmi < 30.0:
+        bmi_status = "Nadwaga"
+    else:
+        bmi_status = "Otyłość"
+
+    woda_litry = round((waga * 35) / 1000, 1)
+
+    st.markdown("---")
+    st.subheader("📊 Twoje Wyliczone Wskaźniki Biometryczne")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Twoje BMI", f"{bmi}", bmi_status)
+    m2.metric("Podstawowe BMR", f"{int(round(bmr))} kcal", "Zapotrzebowanie bazowe")
+    m3.metric("Rekomendowane Kcal", f"{target_kcal_calc} kcal", f"Cel: {cel.split(' (')[0]}")
+    m4.metric("Zalecana woda", f"{woda_litry} l / dzień", "Nawodnienie")
+
+    if st.button("💾 Zapisz profil i prześlij kalorie do Planera dań"):
+        if name_input.strip():
+            st.session_state.user_name = name_input.strip()
+        st.session_state.calculated_target_kcal = target_kcal_calc
+        st.success(f"Zapisano! Cel kaloryczny ({target_kcal_calc} kcal) został zsynchronizowany z Planerem posiłków.")
+        st.rerun()
+
+# ==========================================
+# MODUŁ 1: PLANER POSIŁKÓW
+# ==========================================
+elif menu_choice == "🍳 Planer posiłków i przepisów":
+    st.title(f"Cześć, {st.session_state.user_name}! 🍳")
     st.write("Dopasuj dzienny limit kalorii, posiłki, styl żywienia (w tym insulinooporność i dietę niskotłuszczową) oraz otrzymaj dokładne gramatury i wartości odżywcze.")
 
     col1, col2 = st.columns([1, 2])
@@ -113,7 +215,7 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
             "🔥 Dzienny limit kalorii (kcal):", 
             min_value=1000, 
             max_value=4500, 
-            value=2000, 
+            value=int(st.session_state.calculated_target_kcal), 
             step=50
         )
         days_count = st.slider("Liczba dni:", min_value=1, max_value=7, value=2)
@@ -147,22 +249,22 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
         meals_str = ", ".join(meals)
         prompt = f"""
         Jesteś dyplomowanym dietetykiem klinicznym w Polsce.
-        Przygotuj precyzyjny jadłospis na {days} dni:
-        - DZIENNY LIMIT KALORII: dokładnie około {target_kcal} kcal na każdy dzień (+/- 50 kcal). Rozdziel tę sumę kalorii sensownie pomiędzy wybrane posiłki.
-        - Dieta: {diet} (Jeśli insulinooporność: niski indeks i ładunek glikemiczny, złożone węglowodany, zrównoważony wyrzut insuliny; jeśli niskotłuszczowa: minimalna ilość tłuszczów nasyconych, chudy nabiał, unikanie smażenia na głębokim tłuszczu).
+        Przygotuj precyzyjny jadłospis na {days} dni dla użytkownika o imieniu {st.session_state.user_name}:
+        - DZIENNY CEL KALORII: dokładnie około {target_kcal} kcal na każdy dzień (+/- 50 kcal).
+        - Dieta: {diet} (Dla insulinooporności: niski IG/ładunek, zdrowe źródła węglowodanów i tłuszczu; dla niskotłuszczowej: lekka, chudy nabiał, ograniczenie tłuszczów).
         - Wybrane posiłki na dzień: {meals_str}
-        - Preferencje i wykluczenia: {prefs if prefs else "brak"}
+        - Uwagi: {prefs if prefs else "brak"}
 
         Dla KAŻDEGO posiłku podaj:
         1. "typ": np. 'Śniadanie', 'Obiad' itp.
-        2. "nazwa": nazwa dania
-        3. "skladniki_gramatura": lista składników Z ZAWSZE DOKŁADNIE OKREŚLONĄ WAGĄ W GRAMACH LUB SZTUKACH (np. "180 g piersi z kurczaka", "70 g ryżu basmati", "150 g brokułu", "10 g oliwy"). Gramatury muszą być precyzyjnie dobrane, aby posiłki łącznie dały założone {target_kcal} kcal dziennie!
-        4. "wartosci_odzywcze": {{"kcal": 450, "b": 35, "t": 10, "w": 55}} (kcal, białko w g, tłuszcz w g, węglowodany w g)
-        5. "przepis": krótki, konkretny sposób przygotowania (2-3 zdania).
+        2. "nazwa": nazwa potrawy
+        3. "skladniki_gramatura": lista składników Z ZAWSZE PODANĄ DOKŁADNĄ WAGĄ W GRAMACH LUB SZTUKACH (np. "180 g piersi z kurczaka", "70 g ryżu basmati", "150 g brokułu", "10 g oliwy").
+        4. "wartosci_odzywcze": {{"kcal": 450, "b": 35, "t": 10, "w": 55}}
+        5. "przepis": krótki, 2-3 zdaniowy sposób przygotowania.
 
-        Na koniec wygeneruj zsumowaną listę artykułów z podaniem łącznej wagi/opakowań do kupienia w polskim sklepie (np. "pierś z kurczaka 400 g", "jaja z wolnego wybiegu 10 szt.").
+        Na koniec stwórz zsumowaną listę artykułów z podaniem łącznej wagi/opakowań do kupienia w sklepie.
 
-        Zwróć WYŁĄCZNIE poprawny format JSON w postaci obiektu:
+        Zwróć WYŁĄCZNIE czysty JSON w postaci obiektu:
         {{
           "dni": [
             {{
@@ -171,10 +273,10 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
               "posilki": [
                 {{
                   "typ": "Śniadanie",
-                  "nazwa": "Jajecznica na parze ze szczypiorkiem",
-                  "skladniki_gramatura": ["3 szt. jajka (150 g)", "5 g masła", "20 g szczypiorku", "70 g chleba żytniego 100%"],
+                  "nazwa": "Jajecznica ze szczypiorkiem i żytnim pieczywem",
+                  "skladniki_gramatura": ["3 szt. jajka (150 g)", "5 g masła", "20 g szczypiorku", "70 g chleba żytniego"],
                   "wartosci_odzywcze": {{"kcal": 380, "b": 24, "t": 18, "w": 30}},
-                  "przepis": "Rozgrzej patelnię z masłem. Wbij jajka, smaż na wolnym ogniu i podawaj ze świeżym pieczywem."
+                  "przepis": "Rozgrzej patelnię z masłem. Wbij jajka, smaż na małym ogniu i posyp szczypiorkiem."
                 }}
               ]
             }}
@@ -187,9 +289,9 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
 
     if st.button("✨ Generuj jadłospis z limitem kalorii i makro"):
         if not selected_meals:
-            st.warning("Zaznacz przynajmniej jeden posiłek (np. Śniadanie, Obiad, Kolacja).")
+            st.warning("Zaznacz przynajmniej jeden posiłek.")
         else:
-            with st.spinner(f"AI bilansuje posiłki pod cel {daily_calorie_target} kcal/dzień i oblicza gramatury..."):
+            with st.spinner(f"AI bilansuje posiłki pod cel {daily_calorie_target} kcal/dzień..."):
                 try:
                     plan = generate_meal_plan_advanced(daily_calorie_target, days_count, diet_type, selected_meals, preferences)
                     st.session_state.meal_plan_data = plan
@@ -202,7 +304,7 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
                         for p in d.get("posilki", []):
                             macro = p.get("wartosci_odzywcze", {})
                             context_rows.append(f"  - {p['typ']}: {p['nazwa']} ({macro.get('kcal', 0)} kcal | B:{macro.get('b', 0)}g T:{macro.get('t', 0)}g W:{macro.get('w', 0)}g)")
-                    st.session_state.last_context = f"DIETA ({diet_type}, Cel: {daily_calorie_target} kcal):\n" + "\n".join(context_rows) + "\nZAKUPY: " + st.session_state.shared_shopping_list
+                    st.session_state.last_context = f"PROFIL ({st.session_state.user_name}, Dieta: {diet_type}, Cel: {daily_calorie_target} kcal):\n" + "\n".join(context_rows) + "\nZAKUPY: " + st.session_state.shared_shopping_list
                 except Exception as e:
                     st.error(f"Błąd generowania planu: {e}")
 
@@ -218,7 +320,7 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
             suma_t_dnia = sum(p.get("wartosci_odzywcze", {}).get("t", 0) for p in posilki)
             suma_w_dnia = sum(p.get("wartosci_odzywcze", {}).get("w", 0) for p in posilki)
 
-            st.markdown(f"### 📅 Dzień {d.get('dzien', 1)} — Podsumowanie: `{suma_kcal_dnia} kcal` (B: {suma_b_dnia}g | T: {suma_t_dnia}g | W: {suma_w_dnia}g)")
+            st.markdown(f"### 📅 Dzień {d.get('dzien', 1)} — Bilans: `{suma_kcal_dnia} kcal` (B: {suma_b_dnia}g | T: {suma_t_dnia}g | W: {suma_w_dnia}g)")
             
             cols = st.columns(len(posilki)) if posilki else [st.container()]
             for idx, p in enumerate(posilki):
@@ -229,7 +331,7 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
                     macro = p.get("wartosci_odzywcze", {})
                     st.caption(f"🔥 **{macro.get('kcal', 0)} kcal** | B: {macro.get('b', 0)}g | T: {macro.get('t', 0)}g | W: {macro.get('w', 0)}g")
                     
-                    with st.expander("⚖️ Dokładna waga składników", expanded=True):
+                    with st.expander("⚖️ Gramatura składników", expanded=True):
                         for sk in p.get("skladniki_gramatura", []):
                             st.write(f"- {sk}")
                     
@@ -242,10 +344,10 @@ if menu_choice == "🍳 Planer posiłków i przepisów":
         st.info("💡 Składniki wraz z gramaturami zostały zapisane! W zakładce **🏷️ Lista zakupów z promocjami** możesz od razu rozdzielić te produkty na Lidl i Auchan.")
 
 # ==========================================
-# MODUŁ 2: LISTA ZAKUPÓW Z PROMOCJAMI (LIDL & AUCHAN)
+# MODUŁ 2: LISTA PROMOCJI (LIDL & AUCHAN)
 # ==========================================
 elif menu_choice == "🏷️ Lista zakupów z promocjami":
-    st.title("🏷️ Lista zakupów z promocjami (Lidl vs Auchan)")
+    st.title(f"Cześć, {st.session_state.user_name}! 🏷️")
     st.write("AI porównuje oferty w sieciach Lidl oraz Auchan, wyznacza opłacalność i grupuje listę na sklepy.")
 
     budget_promotions = st.number_input("Twój budżet łączny (zł):", min_value=0.0, value=250.0, step=25.0, key="budget_promo")
@@ -368,7 +470,7 @@ elif menu_choice == "🏷️ Lista zakupów z promocjami":
 # MODUŁ 3: LISTA NA PODSTAWIE WAG
 # ==========================================
 elif menu_choice == "📊 Lista na podstawie wag":
-    st.title("📊 Lista zakupów na podstawie wag (Matryca Priorytetów)")
+    st.title(f"Cześć, {st.session_state.user_name}! 📊")
     st.write("Wielokryterialna matryca priorytetów obliczana wg wag: **koszt (0,5)**, **potrzeba (0,4)**, **dostępność (0,3)**.")
 
     st.markdown("""
@@ -473,7 +575,7 @@ elif menu_choice == "📊 Lista na podstawie wag":
 # MODUŁ 4: ASYSTENT AI (CZAT NA ŻYWO)
 # ==========================================
 elif menu_choice == "💬 Asystent AI":
-    st.title("💬 Asystent AI - Kulinarny & Zakupowy Doradca")
+    st.title(f"Cześć, {st.session_state.user_name}! 💬")
     st.write("Dyskutuj na żywo o zaplanowanych posiłkach, przepisach, zamiennikach składników, kaloriach i promocjach.")
 
     if st.session_state.last_context:
@@ -493,8 +595,9 @@ elif menu_choice == "💬 Asystent AI":
         client = genai.Client(api_key=API_KEY)
         chat_prompt = f"""
         Jesteś dyplomowanym doradcą żywieniowym i zakupowym w Polsce.
+        Rozmawiasz z użytkownikiem o imieniu {st.session_state.user_name}.
         Znasz diety kliniczne (insulinooporność, niskotłuszczowa), bilansowanie kalorii, gramatury i makroskładniki oraz doradzasz tanie zakupy w Lidlu i Auchan.
-        Odpowiadaj konkretnie, profesjonalnie i zwięźle.
+        Zwracaj się bezpośrednio i naturalnie po imieniu.
 
         Kontekst ostatnich analiz użytkownika:
         {st.session_state.last_context if st.session_state.last_context else "Brak wcześniejszych danych."}
