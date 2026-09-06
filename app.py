@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import re
 import time
+import plotly.graph_objects as go
 from google import genai
 from google.genai.errors import APIError
 
@@ -106,7 +107,7 @@ menu_choice = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("🛒 **Inteligentny Asystent Zakupowy**\nPersonalizacja diety, makro, oferty Lidl/Auchan i matryca wagowa.")
+st.sidebar.caption("🛒 **Inteligentny Asystent Zakupowy**\nPersonalizacja diety, wskaźniki BMI/CPM, Lidl/Auchan i matryca priorytetów.")
 
 # ==========================================
 # MODUŁ 0: PROFIL & KALKULATOR (BMI / CPM / MAKRO)
@@ -177,12 +178,16 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
 
     if bmi < 18.5:
         bmi_status = "Niedowaga"
+        bmi_color = "#3498db"
     elif bmi < 25.0:
         bmi_status = "Waga w normie ✅"
+        bmi_color = "#2ecc71"
     elif bmi < 30.0:
         bmi_status = "Nadwaga"
+        bmi_color = "#f39c12"
     else:
         bmi_status = "Otyłość"
+        bmi_color = "#e74c3c"
 
     woda_litry = round((waga * 35) / 1000, 1)
 
@@ -194,6 +199,56 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     m2.metric("Podstawowe BMR", f"{int(round(bmr))} kcal", "Zapotrzebowanie bazowe")
     m3.metric("Rekomendowane Kcal", f"{target_kcal_calc} kcal", f"Cel: {cel.split(' (')[0]}")
     m4.metric("Zalecana woda", f"{woda_litry} l / dzień", "Nawodnienie")
+
+    # ==========================================
+    # WYKRES SKALI BMI (PLOTLY)
+    # ==========================================
+    st.markdown("#### 📈 Wizualizacja Twojego BMI na skali")
+    
+    fig = go.Figure()
+
+    # Paski stref BMI
+    fig.add_trace(go.Bar(y=['BMI'], x=[18.5], name='Niedowaga (<18.5)', orientation='h', marker=dict(color='#5dade2')))
+    fig.add_trace(go.Bar(y=['BMI'], x=[6.4], name='Norma (18.5 - 24.9)', orientation='h', marker=dict(color='#2ecc71')))
+    fig.add_trace(go.Bar(y=['BMI'], x=[5.0], name='Nadwaga (25.0 - 29.9)', orientation='h', marker=dict(color='#f39c12')))
+    fig.add_trace(go.Bar(y=['BMI'], x=[10.1], name='Otyłość (≥30.0)', orientation='h', marker=dict(color='#e74c3c')))
+
+    # Linia wskazująca aktualne BMI
+    fig.add_shape(
+        type="line",
+        x0=bmi, y0=-0.4, x1=bmi, y1=0.4,
+        line=dict(color="black", width=4, dash="solid")
+    )
+
+    # Etykieta ze wskaźnikiem
+    fig.add_annotation(
+        x=bmi, y=0.5,
+        text=f"Twoje BMI: <b>{bmi}</b> ({bmi_status})",
+        showarrow=True,
+        arrowhead=2,
+        arrowsize=1.2,
+        arrowwidth=2,
+        arrowcolor="black",
+        ax=0,
+        ay=-35,
+        font=dict(size=14, color=bmi_color)
+    )
+
+    fig.update_layout(
+        barmode='stack',
+        xaxis=dict(
+            range=[10, 40],
+            tickvals=[10, 18.5, 25, 30, 40],
+            ticktext=['10', '18.5 (Niedowaga)', '25.0 (Norma)', '30.0 (Nadwaga)', '40 (Otyłość)'],
+            title="Skala wskaźnika masy ciała (BMI)"
+        ),
+        yaxis=dict(showticklabels=False),
+        height=220,
+        margin=dict(l=20, r=20, t=50, b=30),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.6, xanchor="center", x=0.5)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
     if st.button("💾 Zapisz profil i prześlij kalorie do Planera dań"):
         if name_input.strip():
@@ -576,7 +631,7 @@ elif menu_choice == "📊 Lista na podstawie wag":
 # ==========================================
 elif menu_choice == "💬 Asystent AI":
     st.title(f"Cześć, {st.session_state.user_name}! 💬")
-    st.write("Dyskutuj na żywo o zaplanowanych posiłkach, przepisach, zamiennikach składników, kaloriach i promocjach.")
+    st.write("Dyskutuj na żywo o zaplanowanych posiłkach, przepisach, zamiennikach składników, stylu życia, kaloriach i promocjach.")
 
     if st.session_state.last_context:
         with st.expander("📌 Aktywny kontekst z Twoich wcześniejszych analiz"):
