@@ -3,7 +3,6 @@ import pandas as pd
 import json
 import re
 import time
-import plotly.graph_objects as go
 from google import genai
 from google.genai.errors import APIError
 
@@ -153,7 +152,6 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     }
     pal = pal_factors[aktywnosc]
 
-    # BMR wzorem Mifflina-St Jeora
     if plec == "Kobieta":
         bmr = (10 * waga) + (6.25 * wzrost) - (5 * wiek) - 161
     else:
@@ -161,7 +159,6 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
 
     cpm = bmr * pal
 
-    # Korekta o cel
     delta_kcal = 0
     if "Redukcja umiarkowana" in cel:
         delta_kcal = -300
@@ -201,54 +198,41 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     m4.metric("Zalecana woda", f"{woda_litry} l / dzień", "Nawodnienie")
 
     # ==========================================
-    # WYKRES SKALI BMI (PLOTLY)
+    # GRAFICZNY WSKAŹNIK BMI (HTML / CSS)
     # ==========================================
     st.markdown("#### 📈 Wizualizacja Twojego BMI na skali")
-    
-    fig = go.Figure()
 
-    # Paski stref BMI
-    fig.add_trace(go.Bar(y=['BMI'], x=[18.5], name='Niedowaga (<18.5)', orientation='h', marker=dict(color='#5dade2')))
-    fig.add_trace(go.Bar(y=['BMI'], x=[6.4], name='Norma (18.5 - 24.9)', orientation='h', marker=dict(color='#2ecc71')))
-    fig.add_trace(go.Bar(y=['BMI'], x=[5.0], name='Nadwaga (25.0 - 29.9)', orientation='h', marker=dict(color='#f39c12')))
-    fig.add_trace(go.Bar(y=['BMI'], x=[10.1], name='Otyłość (≥30.0)', orientation='h', marker=dict(color='#e74c3c')))
+    # Obliczenie procentowej pozycji na skali od 10 do 40
+    min_scale = 10.0
+    max_scale = 40.0
+    clamped_bmi = max(min_scale, min(bmi, max_scale))
+    marker_pos = ((clamped_bmi - min_scale) / (max_scale - min_scale)) * 100
 
-    # Linia wskazująca aktualne BMI
-    fig.add_shape(
-        type="line",
-        x0=bmi, y0=-0.4, x1=bmi, y1=0.4,
-        line=dict(color="black", width=4, dash="solid")
-    )
-
-    # Etykieta ze wskaźnikiem
-    fig.add_annotation(
-        x=bmi, y=0.5,
-        text=f"Twoje BMI: <b>{bmi}</b> ({bmi_status})",
-        showarrow=True,
-        arrowhead=2,
-        arrowsize=1.2,
-        arrowwidth=2,
-        arrowcolor="black",
-        ax=0,
-        ay=-35,
-        font=dict(size=14, color=bmi_color)
-    )
-
-    fig.update_layout(
-        barmode='stack',
-        xaxis=dict(
-            range=[10, 40],
-            tickvals=[10, 18.5, 25, 30, 40],
-            ticktext=['10', '18.5 (Niedowaga)', '25.0 (Norma)', '30.0 (Nadwaga)', '40 (Otyłość)'],
-            title="Skala wskaźnika masy ciała (BMI)"
-        ),
-        yaxis=dict(showticklabels=False),
-        height=220,
-        margin=dict(l=20, r=20, t=50, b=30),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.6, xanchor="center", x=0.5)
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+    bmi_gauge_html = f"""
+    <div style="width: 100%; max-width: 800px; margin: 20px 0; font-family: sans-serif;">
+        <div style="position: relative; margin-bottom: 8px;">
+            <div style="position: absolute; left: {marker_pos}%; transform: translateX(-50%); text-align: center; white-space: nowrap;">
+                <span style="font-weight: bold; font-size: 14px; color: {bmi_color}; background: #ffffff; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
+                    ▼ Twoje BMI: {bmi} ({bmi_status})
+                </span>
+            </div>
+        </div>
+        <div style="height: 28px; width: 100%; border-radius: 14px; display: flex; overflow: hidden; margin-top: 32px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+            <div style="flex: 28.3; background-color: #5dade2;" title="Niedowaga (<18.5)"></div>
+            <div style="flex: 21.7; background-color: #2ecc71;" title="Norma (18.5 - 24.9)"></div>
+            <div style="flex: 16.7; background-color: #f39c12;" title="Nadwaga (25.0 - 29.9)"></div>
+            <div style="flex: 33.3; background-color: #e74c3c;" title="Otyłość (≥30.0)"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-top: 6px;">
+            <span>10</span>
+            <span>18.5 (Niedowaga)</span>
+            <span>25.0 (Norma)</span>
+            <span>30.0 (Nadwaga)</span>
+            <span>40 (Otyłość)</span>
+        </div>
+    </div>
+    """
+    st.markdown(bmi_gauge_html, unsafe_allow_html=True)
 
     if st.button("💾 Zapisz profil i prześlij kalorie do Planera dań"):
         if name_input.strip():
@@ -631,7 +615,7 @@ elif menu_choice == "📊 Lista na podstawie wag":
 # ==========================================
 elif menu_choice == "💬 Asystent AI":
     st.title(f"Cześć, {st.session_state.user_name}! 💬")
-    st.write("Dyskutuj na żywo o zaplanowanych posiłkach, przepisach, zamiennikach składników, stylu życia, kaloriach i promocjach.")
+    st.write("Dyskutuj na żywo o zaplanowanych posiłkach, przepisach, zamiennikach składników, kaloriach i promocjach.")
 
     if st.session_state.last_context:
         with st.expander("📌 Aktywny kontekst z Twoich wcześniejszych analiz"):
