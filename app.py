@@ -169,22 +169,32 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
 
     target_kcal_calc = int(round(cpm + delta_kcal))
 
-    # BMI
+    # BMI i zakres prawidłowej wagi
     wzrost_m = wzrost / 100.0
     bmi = round(waga / (wzrost_m ** 2), 1)
+
+    min_norm_weight = round(18.5 * (wzrost_m ** 2), 1)
+    max_norm_weight = round(24.9 * (wzrost_m ** 2), 1)
 
     if bmi < 18.5:
         bmi_status = "Niedowaga"
         bmi_color = "#3498db"
+        diff_weight = round(min_norm_weight - waga, 1)
+        weight_advice = f"⚖️ Do dolnej granicy prawidłowego BMI (18.5) brakuje Ci: **+{diff_weight} kg**."
     elif bmi < 25.0:
         bmi_status = "Waga w normie ✅"
         bmi_color = "#2ecc71"
+        weight_advice = f"🎉 Świetnie! Twoja waga mieści się w prawidłowym przedziale (**{min_norm_weight} kg – {max_norm_weight} kg**)."
     elif bmi < 30.0:
         bmi_status = "Nadwaga"
         bmi_color = "#f39c12"
+        diff_weight = round(waga - max_norm_weight, 1)
+        weight_advice = f"⚖️ Do górnej granicy prawidłowego BMI (24.9) należy zredukować: **-{diff_weight} kg**."
     else:
         bmi_status = "Otyłość"
         bmi_color = "#e74c3c"
+        diff_weight = round(waga - max_norm_weight, 1)
+        weight_advice = f"⚖️ Do osiągnięcia normy BMI (24.9) należy zredukować: **-{diff_weight} kg**."
 
     woda_litry = round((waga * 35) / 1000, 1)
 
@@ -202,7 +212,6 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     # ==========================================
     st.markdown("#### 📈 Wizualizacja Twojego BMI na skali")
 
-    # Obliczenie procentowej pozycji na skali od 10 do 40
     min_scale = 10.0
     max_scale = 40.0
     clamped_bmi = max(min_scale, min(bmi, max_scale))
@@ -234,6 +243,31 @@ if menu_choice == "👤 Profil, Zdrowie & Kalorie":
     """
     st.markdown(bmi_gauge_html, unsafe_allow_html=True)
 
+    # Informacja o wadze docelowej
+    st.info(weight_advice)
+
+    # ==========================================
+    # WSKAZÓWKI: CZEGO UNIKAĆ W DIECIE
+    # ==========================================
+    st.markdown("---")
+    st.subheader("🚫 Czego unikać w diecie, aby zoptymalizować zdrowie i wagę?")
+
+    col_u1, col_u2 = st.columns(2)
+    with col_u1:
+        st.markdown("**1. Płynne kalorie i ukryte cukry**")
+        st.write("Unikaj słodzonych napojów gazowanych, wód smakowych, nektarów owocowych oraz dosładzanych kaw mrożonych. Szybko podbijają wyrzut insuliny i nie dają sytości.")
+        
+        st.markdown("**2. Żywność ultraprzetworzona (UPF)**")
+        st.write("Ogranicz gotowe dania instant, słone przekąski (chipsy, krakersy), ciastka przemysłowe i wyroby cukiernicze zawierające tłuszcze trans.")
+
+    with col_u2:
+        st.markdown("**3. Produkty o wysokim indeksie glikemicznym (IG)**")
+        st.write("Wystrzegaj się białego pieczywa tostowego, drobnych kasz pszennych, rozgotowanego makaronu i słodyczy na pusty żołądek. Powodują gwałtowne skoki i spadki energii.")
+        
+        st.markdown("**4. Nieregularne jedzenie i podjadanie**")
+        st.write("Unikaj ciągłego 'chrupania' między posiłkami (orzechów, owoców suszonych, kęsów jedzenia) — każde podjadanie utrzymuje podwyższony poziom glukozy i utrudnia spalanie tkanki tłuszczowej.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("💾 Zapisz profil i prześlij kalorie do Planera dań"):
         if name_input.strip():
             st.session_state.user_name = name_input.strip()
